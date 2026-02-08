@@ -15,15 +15,64 @@ export interface FilingItemTypes {
 }
 
 /**
+ * Standard SEC filing item types.
+ * These are defined by SEC regulation and rarely change,
+ * so a static fallback is reliable when the API is unavailable.
+ */
+const FALLBACK_ITEM_TYPES: FilingItemTypes = {
+  '10-K': [
+    { name: 'Item-1', title: 'Business' },
+    { name: 'Item-1A', title: 'Risk Factors' },
+    { name: 'Item-1B', title: 'Unresolved Staff Comments' },
+    { name: 'Item-1C', title: 'Cybersecurity' },
+    { name: 'Item-2', title: 'Properties' },
+    { name: 'Item-3', title: 'Legal Proceedings' },
+    { name: 'Item-4', title: 'Mine Safety Disclosures' },
+    { name: 'Item-5', title: 'Market for Common Equity' },
+    { name: 'Item-6', title: 'Reserved' },
+    { name: 'Item-7', title: "Management's Discussion and Analysis (MD&A)" },
+    { name: 'Item-7A', title: 'Quantitative and Qualitative Disclosures About Market Risk' },
+    { name: 'Item-8', title: 'Financial Statements and Supplementary Data' },
+    { name: 'Item-9', title: 'Changes in and Disagreements with Accountants' },
+    { name: 'Item-9A', title: 'Controls and Procedures' },
+    { name: 'Item-9B', title: 'Other Information' },
+    { name: 'Item-10', title: 'Directors and Corporate Governance' },
+    { name: 'Item-11', title: 'Executive Compensation' },
+    { name: 'Item-12', title: 'Security Ownership' },
+    { name: 'Item-13', title: 'Certain Relationships and Related Transactions' },
+    { name: 'Item-14', title: 'Principal Accountant Fees and Services' },
+    { name: 'Item-15', title: 'Exhibits and Financial Statement Schedules' },
+  ],
+  '10-Q': [
+    { name: 'Part-1,Item-1', title: 'Financial Statements' },
+    { name: 'Part-1,Item-2', title: "Management's Discussion and Analysis (MD&A)" },
+    { name: 'Part-1,Item-3', title: 'Quantitative and Qualitative Disclosures About Market Risk' },
+    { name: 'Part-1,Item-4', title: 'Controls and Procedures' },
+    { name: 'Part-2,Item-1', title: 'Legal Proceedings' },
+    { name: 'Part-2,Item-1A', title: 'Risk Factors' },
+    { name: 'Part-2,Item-2', title: 'Unregistered Sales of Equity Securities' },
+    { name: 'Part-2,Item-3', title: 'Defaults Upon Senior Securities' },
+    { name: 'Part-2,Item-4', title: 'Mine Safety Disclosures' },
+    { name: 'Part-2,Item-5', title: 'Other Information' },
+    { name: 'Part-2,Item-6', title: 'Exhibits' },
+  ],
+};
+
+/**
  * Fetches canonical item type names from the API.
- * Used to provide the inner LLM with exact item names for selective retrieval.
+ * Falls back to static definitions when the API is unavailable
+ * (e.g. FMP-only users without a Financial Datasets key).
  */
 export async function getFilingItemTypes(): Promise<FilingItemTypes> {
-  const response = await fetch('https://api.financialdatasets.ai/filings/items/types/');
-  if (!response.ok) {
-    throw new Error(`Failed to fetch filing item types: ${response.status}`);
+  try {
+    const response = await fetch('https://api.financialdatasets.ai/filings/items/types/');
+    if (!response.ok) {
+      return FALLBACK_ITEM_TYPES;
+    }
+    return await response.json();
+  } catch {
+    return FALLBACK_ITEM_TYPES;
   }
-  return response.json();
 }
 
 const FilingsInputSchema = z.object({

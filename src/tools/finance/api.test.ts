@@ -104,7 +104,7 @@ describe('callApi — FMP adapter', () => {
 
     const result = await callApi('/financial-metrics/snapshot/', { ticker: 'AAPL' });
 
-    expect(result.data).toEqual({ snapshot: fmpData });
+    expect(result.data).toEqual({ snapshot: fmpData[0] });
     expect(result.url).toContain('/stable/ratios-ttm');
     expect(result.url).toContain('symbol=AAPL');
   });
@@ -246,10 +246,10 @@ describe('callApi — FMP adapter', () => {
   // Unsupported endpoint
   // -------------------------------------------------------------------------
 
-  test('throws for unsupported endpoints (e.g. filings/items)', async () => {
+  test('throws descriptive error for filings/items (requires Financial Datasets key)', async () => {
     await expect(
       callApi('/filings/items/', { ticker: 'AAPL' })
-    ).rejects.toThrow('not supported by FMP adapter');
+    ).rejects.toThrow('requires a Financial Datasets API key');
   });
 
   test('throws for unsupported endpoints', async () => {

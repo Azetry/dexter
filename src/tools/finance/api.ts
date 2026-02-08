@@ -145,7 +145,11 @@ export async function callApi(
     // --- Financial Metrics ---
     // NOTE: snapshot must be checked before the general /financial-metrics/ match
     if (endpoint.includes('/financial-metrics/snapshot/')) {
-      return returnFMP(await fetchFMP('/ratios-ttm', 'snapshot'));
+      const result = await fetchFMP('/ratios-ttm', 'snapshot');
+      // FMP returns array; extract first element
+      const arr = result.data.snapshot;
+      result.data = { snapshot: Array.isArray(arr) ? arr[0] : arr };
+      return returnFMP(result);
     }
     if (endpoint.includes('/financial-metrics/')) {
       return returnFMP(await fetchFMP('/ratios', 'financial_metrics'));
@@ -202,6 +206,14 @@ export async function callApi(
       const extra: Record<string, string> = {};
       if (params.filing_type) extra.type = String(params.filing_type);
       return returnFMP(await fetchFMP('/sec-filings-search/symbol', 'filings', extra));
+    }
+
+    // --- SEC Filing Content (not available via FMP) ---
+    if (endpoint.includes('/filings/items/')) {
+      throw new Error(
+        'SEC filing content retrieval requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
+        'The FMP API only supports filing metadata via get_filings, not full-text content.'
+      );
     }
 
     // --- Not supported ---

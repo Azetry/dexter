@@ -113,12 +113,27 @@ export async function callApi(
             url.searchParams.append(k, v);
           }
         }
-        const res = await fetch(url.toString());
+
+        let res: Response;
+        try {
+          res = await fetch(url.toString());
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.error(`FMP network error: ${label} — ${message}`);
+          throw new Error(`FMP API request failed for ${label}: ${message}`);
+        }
+
         if (!res.ok) {
           logger.error(`FMP API error: ${label} — ${res.status}`);
           throw new Error(`FMP API request failed: ${res.status}`);
         }
-        const data = await res.json();
+
+        const data = await res.json().catch(() => {
+          const detail = `invalid JSON (${res.status} ${res.statusText})`;
+          logger.error(`FMP parse error: ${label} — ${detail}`);
+          throw new Error(`FMP API request failed: ${detail}`);
+        });
+
         return { data: { [subKey]: data }, url: url.toString() };
     };
 
@@ -154,6 +169,7 @@ export async function callApi(
       const data = { financials: { ...income.data, ...balance.data, ...cash.data } };
       const url = `${FMP_BASE_URL}/(aggregated)`;
       if (options?.cacheable) writeCache(endpoint, params, data, url);
+      logger.debug(`API OK: ${label}`, summarizeData(data));
       return { data, url };
     }
 
@@ -168,6 +184,15 @@ export async function callApi(
     }
     if (endpoint.includes('/financial-metrics/')) {
       return returnFMP(await fetchFMP('/ratios', 'financial_metrics'));
+    }
+
+    // --- Crypto (not available via FMP) ---
+    // NOTE: must be checked before /prices/ to avoid false matches
+    if (endpoint.includes('/crypto/')) {
+      const msg = 'Cryptocurrency data requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
+        'The FMP API adapter does not support crypto endpoints.';
+      logger.warn(`FMP unsupported: ${label} — ${msg}`);
+      throw new Error(msg);
     }
 
     // --- Stock Prices ---
@@ -242,14 +267,16 @@ export async function callApi(
 
     // --- SEC Filing Content (not available via FMP) ---
     if (endpoint.includes('/filings/items/')) {
-      throw new Error(
-        'SEC filing content retrieval requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
-        'The FMP API only supports filing metadata via get_filings, not full-text content.'
-      );
+      const msg = 'SEC filing content retrieval requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
+        'The FMP API only supports filing metadata via get_filings, not full-text content.';
+      logger.warn(`FMP unsupported: ${label} — ${msg}`);
+      throw new Error(msg);
     }
 
     // --- Not supported ---
-    throw new Error(`Endpoint ${endpoint} not supported by FMP adapter yet`);
+    const msg = `Endpoint ${endpoint} not supported by FMP adapter yet`;
+    logger.warn(`FMP unsupported: ${label} — ${msg}`);
+    throw new Error(msg);
 
   } else {
     throw new Error('No valid financial API key found (requires FINANCIAL_DATASETS_API_KEY or FMP_API_KEY)');

@@ -128,22 +128,19 @@ export async function callApi(
            fetchFMP(`/cash-flow-statement/${ticker}`, 'cash_flow_statements')
        ]);
 
-       return {
-           data: {
-               financials: {
-                   ...income,
-                   ...balance,
-                   ...cash
-               }
-           },
-           url: 'https://financialmodelingprep.com/api/v3/(aggregated)'
-       };
+       const data = { financials: { ...income, ...balance, ...cash } };
+       const url = 'https://financialmodelingprep.com/api/v3/(aggregated)';
+       if (options?.cacheable) {
+         writeCache(endpoint, params, data, url);
+       }
+       return { data, url };
     } else {
        const result = await fetchFMP(fmpEndpoint, resultKey);
-       return {
-           data: result,
-           url: `${FMP_BASE_URL}${fmpEndpoint}`
-       };
+       const url = `${FMP_BASE_URL}${fmpEndpoint}`;
+       if (options?.cacheable) {
+         writeCache(endpoint, params, result, url);
+       }
+       return { data: result, url };
     }
 
   } else {

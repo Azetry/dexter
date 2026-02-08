@@ -3,12 +3,11 @@ services:
     build: .
     volumes:
       - .:/app
-      - /app/node_modules
+      - dexter_node_modules:/app/node_modules
     env_file:
       - .env
-    environment:
-      - FMP_API_KEY=${FMP_API_KEY}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - EXASEARCH_API_KEY=${EXASEARCH_API_KEY}
     stdin_open: true
     tty: true
+
+volumes:
+  dexter_node_modules:

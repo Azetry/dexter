@@ -129,8 +129,107 @@ describe('callApi — FMP adapter', () => {
   });
 
   // -------------------------------------------------------------------------
+  // New endpoint mappings
+  // -------------------------------------------------------------------------
+
+  test('maps prices/snapshot endpoint (extracts first element)', async () => {
+    const fmpData = [{ symbol: 'AAPL', price: 185.5, volume: 50000000 }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/prices/snapshot/', { ticker: 'AAPL' });
+
+    expect(result.data).toEqual({ snapshot: fmpData[0] });
+    expect(result.url).toContain('/quote/AAPL');
+  });
+
+  test('maps prices endpoint (extracts historical array)', async () => {
+    const fmpData = { symbol: 'AAPL', historical: [{ date: '2024-12-31', close: 185.5 }] };
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/prices/', { ticker: 'AAPL', start_date: '2024-01-01', end_date: '2024-12-31' });
+
+    expect(result.data).toEqual({ prices: fmpData.historical });
+    expect(result.url).toContain('/historical-price-full/AAPL');
+    const calledUrl = (fetchSpy.mock.calls[0] as [string])[0];
+    expect(calledUrl).toContain('from=2024-01-01');
+    expect(calledUrl).toContain('to=2024-12-31');
+  });
+
+  test('maps company/facts endpoint (extracts first element)', async () => {
+    const fmpData = [{ symbol: 'AAPL', companyName: 'Apple Inc.', sector: 'Technology' }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/company/facts', { ticker: 'AAPL' });
+
+    expect(result.data).toEqual({ company_facts: fmpData[0] });
+    expect(result.url).toContain('/profile/AAPL');
+  });
+
+  test('maps analyst-estimates endpoint', async () => {
+    const fmpData = [{ date: '2025-12-31', estimatedRevenueAvg: 400000000000 }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/analyst-estimates/', { ticker: 'AAPL', period: 'annual' });
+
+    expect(result.data).toEqual({ analyst_estimates: fmpData });
+    expect(result.url).toContain('/analyst-estimates/AAPL');
+  });
+
+  test('maps insider-trades endpoint (uses symbol query param)', async () => {
+    const fmpData = [{ symbol: 'AAPL', transactionDate: '2024-12-15', transactionType: 'S-Sale' }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/insider-trades/', { ticker: 'AAPL', limit: 50 });
+
+    expect(result.data).toEqual({ insider_trades: fmpData });
+    const calledUrl = (fetchSpy.mock.calls[0] as [string])[0];
+    expect(calledUrl).toContain('/insider-trading');
+    expect(calledUrl).toContain('symbol=AAPL');
+  });
+
+  test('maps news endpoint (uses tickers query param)', async () => {
+    const fmpData = [{ title: 'Apple Q4 Earnings', publishedDate: '2024-12-20' }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/news/', { ticker: 'AAPL', limit: 10 });
+
+    expect(result.data).toEqual({ news: fmpData });
+    const calledUrl = (fetchSpy.mock.calls[0] as [string])[0];
+    expect(calledUrl).toContain('/stock_news');
+    expect(calledUrl).toContain('tickers=AAPL');
+  });
+
+  test('maps filings endpoint (passes filing_type as type param)', async () => {
+    const fmpData = [{ symbol: 'AAPL', type: '10-K', fillingDate: '2024-11-01' }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/filings/', { ticker: 'AAPL', filing_type: '10-K', limit: 5 });
+
+    expect(result.data).toEqual({ filings: fmpData });
+    const calledUrl = (fetchSpy.mock.calls[0] as [string])[0];
+    expect(calledUrl).toContain('/sec_filings/AAPL');
+    expect(calledUrl).toContain('type=10-K');
+  });
+
+  test('maps segmented-revenues endpoint', async () => {
+    const fmpData = [{ date: '2024-12-31', iphoneRevenue: 200000000000 }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/financials/segmented-revenues/', { ticker: 'AAPL', period: 'annual', limit: 5 });
+
+    expect(result.data).toEqual({ segmented_revenues: fmpData });
+    expect(result.url).toContain('/revenue-product-segmentation/AAPL');
+  });
+
+  // -------------------------------------------------------------------------
   // Unsupported endpoint
   // -------------------------------------------------------------------------
+
+  test('throws for unsupported endpoints (e.g. filings/items)', async () => {
+    await expect(
+      callApi('/filings/items/', { ticker: 'AAPL' })
+    ).rejects.toThrow('not supported by FMP adapter');
+  });
 
   test('throws for unsupported endpoints', async () => {
     await expect(

@@ -2,7 +2,7 @@ import { readCache, writeCache, describeRequest } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 
 const BASE_URL = 'https://api.financialdatasets.ai';
-const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
+const FMP_BASE_URL = 'https://financialmodelingprep.com/stable';
 
 export interface ApiResponse {
   data: Record<string, unknown>;
@@ -81,67 +81,131 @@ export async function callApi(
     const ticker = params.ticker as string;
     if (!ticker) throw new Error('Ticker is required for FMP API');
 
-    let fmpEndpoint = '';
-    let resultKey = '';
-    let isAggregated = false;
-
-    if (endpoint.includes('income-statements')) {
-      fmpEndpoint = `/income-statement/${ticker}`;
-      resultKey = 'income_statements';
-    } else if (endpoint.includes('balance-sheets')) {
-      fmpEndpoint = `/balance-sheet-statement/${ticker}`;
-      resultKey = 'balance_sheets';
-    } else if (endpoint.includes('cash-flow-statements')) {
-      fmpEndpoint = `/cash-flow-statement/${ticker}`;
-      resultKey = 'cash_flow_statements';
-    } else if (endpoint === '/financials/') {
-      isAggregated = true;
-    } else if (endpoint.includes('/financial-metrics/snapshot/')) {
-        fmpEndpoint = `/ratios-ttm/${ticker}`;
-        resultKey = 'snapshot';
-    } else if (endpoint.includes('/financial-metrics/')) {
-        fmpEndpoint = `/ratios/${ticker}`;
-        resultKey = 'financial_metrics';
-    } else {
-      throw new Error(`Endpoint ${endpoint} not supported by FMP adapter yet`);
-    }
-
-    // Helper to fetch FMP
-    const fetchFMP = async (subEndpoint: string, subKey: string) => {
+    // Helper: build FMP URL, fetch, and return { [subKey]: data }
+    // The stable API uses query params (?symbol=AAPL) instead of path params (/AAPL)
+    const fetchFMP = async (
+      subEndpoint: string,
+      subKey: string,
+      extraParams?: Record<string, string>,
+      opts?: { skipSymbol?: boolean }
+    ) => {
         const url = new URL(`${FMP_BASE_URL}${subEndpoint}`);
+        if (!opts?.skipSymbol) url.searchParams.append('symbol', ticker);
         url.searchParams.append('apikey', FMP_API_KEY);
         if (params.limit) url.searchParams.append('limit', String(params.limit));
         if (params.period === 'quarterly') url.searchParams.append('period', 'quarter');
-        // FMP doesn't support other filters (dates) easily in this endpoint style without bulk, ignoring for now.
-
+        if (extraParams) {
+          for (const [k, v] of Object.entries(extraParams)) {
+            url.searchParams.append(k, v);
+          }
+        }
         const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`FMP API request failed: ${res.status}`);
+        if (!res.ok) {
+          logger.error(`FMP API error: ${label} — ${res.status}`);
+          throw new Error(`FMP API request failed: ${res.status}`);
+        }
         const data = await res.json();
-        return { [subKey]: data };
+        return { data: { [subKey]: data }, url: url.toString() };
     };
 
-    if (isAggregated) {
-       // Parallel fetch for aggregated
-       const [income, balance, cash] = await Promise.all([
-           fetchFMP(`/income-statement/${ticker}`, 'income_statements'),
-           fetchFMP(`/balance-sheet-statement/${ticker}`, 'balance_sheets'),
-           fetchFMP(`/cash-flow-statement/${ticker}`, 'cash_flow_statements')
-       ]);
+    // Helper: cache + return
+    const returnFMP = (result: { data: Record<string, unknown>; url: string }) => {
+      if (options?.cacheable) {
+        writeCache(endpoint, params, result.data, result.url);
+      }
+      return result;
+    };
 
-       const data = { financials: { ...income, ...balance, ...cash } };
-       const url = 'https://financialmodelingprep.com/api/v3/(aggregated)';
-       if (options?.cacheable) {
-         writeCache(endpoint, params, data, url);
-       }
-       return { data, url };
-    } else {
-       const result = await fetchFMP(fmpEndpoint, resultKey);
-       const url = `${FMP_BASE_URL}${fmpEndpoint}`;
-       if (options?.cacheable) {
-         writeCache(endpoint, params, result, url);
-       }
-       return { data: result, url };
+    // --- Financial Statements ---
+    if (endpoint.includes('income-statements')) {
+      return returnFMP(await fetchFMP('/income-statement', 'income_statements'));
     }
+    if (endpoint.includes('balance-sheets')) {
+      return returnFMP(await fetchFMP('/balance-sheet-statement', 'balance_sheets'));
+    }
+    if (endpoint.includes('cash-flow-statements')) {
+      return returnFMP(await fetchFMP('/cash-flow-statement', 'cash_flow_statements'));
+    }
+    if (endpoint.includes('/segmented-revenues/')) {
+      return returnFMP(await fetchFMP('/revenue-product-segmentation', 'segmented_revenues'));
+    }
+    if (endpoint === '/financials/') {
+      // Aggregated: parallel fetch all 3 statements
+      const [income, balance, cash] = await Promise.all([
+        fetchFMP('/income-statement', 'income_statements'),
+        fetchFMP('/balance-sheet-statement', 'balance_sheets'),
+        fetchFMP('/cash-flow-statement', 'cash_flow_statements'),
+      ]);
+      const data = { financials: { ...income.data, ...balance.data, ...cash.data } };
+      const url = `${FMP_BASE_URL}/(aggregated)`;
+      if (options?.cacheable) writeCache(endpoint, params, data, url);
+      return { data, url };
+    }
+
+    // --- Financial Metrics ---
+    // NOTE: snapshot must be checked before the general /financial-metrics/ match
+    if (endpoint.includes('/financial-metrics/snapshot/')) {
+      return returnFMP(await fetchFMP('/ratios-ttm', 'snapshot'));
+    }
+    if (endpoint.includes('/financial-metrics/')) {
+      return returnFMP(await fetchFMP('/ratios', 'financial_metrics'));
+    }
+
+    // --- Stock Prices ---
+    if (endpoint.includes('/prices/snapshot')) {
+      const result = await fetchFMP('/quote', 'snapshot');
+      // FMP returns array; extract first element
+      const arr = result.data.snapshot;
+      result.data = { snapshot: Array.isArray(arr) ? arr[0] : arr };
+      return returnFMP(result);
+    }
+    if (endpoint === '/prices/') {
+      const extra: Record<string, string> = {};
+      if (params.start_date) extra.from = String(params.start_date);
+      if (params.end_date) extra.to = String(params.end_date);
+      const result = await fetchFMP('/historical-price-eod/full', 'prices', extra);
+      // FMP returns { symbol, historical: [...] }; extract the array
+      const raw = result.data.prices as Record<string, unknown>;
+      result.data = { prices: (raw && typeof raw === 'object' && 'historical' in raw) ? raw.historical : raw };
+      return returnFMP(result);
+    }
+
+    // --- Company Info ---
+    if (endpoint === '/company/facts') {
+      const result = await fetchFMP('/profile', 'company_facts');
+      // FMP returns array; extract first element
+      const arr = result.data.company_facts;
+      result.data = { company_facts: Array.isArray(arr) ? arr[0] : arr };
+      return returnFMP(result);
+    }
+
+    // --- Analyst Estimates ---
+    if (endpoint.includes('/analyst-estimates/')) {
+      return returnFMP(await fetchFMP('/analyst-estimates', 'analyst_estimates'));
+    }
+
+    // --- Insider Trades ---
+    if (endpoint.includes('/insider-trades/')) {
+      return returnFMP(await fetchFMP('/insider-trading/search', 'insider_trades'));
+    }
+
+    // --- News ---
+    if (endpoint === '/news/') {
+      const extra: Record<string, string> = { symbols: ticker };
+      if (params.start_date) extra.from = String(params.start_date);
+      if (params.end_date) extra.to = String(params.end_date);
+      return returnFMP(await fetchFMP('/news/stock', 'news', extra, { skipSymbol: true }));
+    }
+
+    // --- SEC Filings (metadata only) ---
+    if (endpoint === '/filings/') {
+      const extra: Record<string, string> = {};
+      if (params.filing_type) extra.type = String(params.filing_type);
+      return returnFMP(await fetchFMP('/sec-filings-search/symbol', 'filings', extra));
+    }
+
+    // --- Not supported ---
+    throw new Error(`Endpoint ${endpoint} not supported by FMP adapter yet`);
 
   } else {
     throw new Error('No valid financial API key found (requires FINANCIAL_DATASETS_API_KEY or FMP_API_KEY)');

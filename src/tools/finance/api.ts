@@ -147,16 +147,16 @@ export async function callApi(
     };
 
     // --- Financial Statements ---
-    if (endpoint.includes('income-statements')) {
+    if (endpoint === '/financials/income-statements/') {
       return returnFMP(await fetchFMP('/income-statement', 'income_statements'));
     }
-    if (endpoint.includes('balance-sheets')) {
+    if (endpoint === '/financials/balance-sheets/') {
       return returnFMP(await fetchFMP('/balance-sheet-statement', 'balance_sheets'));
     }
-    if (endpoint.includes('cash-flow-statements')) {
+    if (endpoint === '/financials/cash-flow-statements/') {
       return returnFMP(await fetchFMP('/cash-flow-statement', 'cash_flow_statements'));
     }
-    if (endpoint.includes('/segmented-revenues/')) {
+    if (endpoint === '/financials/segmented-revenues/') {
       return returnFMP(await fetchFMP('/revenue-product-segmentation', 'segmented_revenues'));
     }
     if (endpoint === '/financials/') {
@@ -174,21 +174,19 @@ export async function callApi(
     }
 
     // --- Financial Metrics ---
-    // NOTE: snapshot must be checked before the general /financial-metrics/ match
-    if (endpoint.includes('/financial-metrics/snapshot/')) {
+    if (endpoint === '/financial-metrics/snapshot/') {
       const result = await fetchFMP('/ratios-ttm', 'snapshot');
       // FMP returns array; extract first element
       const arr = result.data.snapshot;
       result.data = { snapshot: Array.isArray(arr) ? arr[0] : arr };
       return returnFMP(result);
     }
-    if (endpoint.includes('/financial-metrics/')) {
+    if (endpoint === '/financial-metrics/') {
       return returnFMP(await fetchFMP('/ratios', 'financial_metrics'));
     }
 
     // --- Crypto (not available via FMP) ---
-    // NOTE: must be checked before /prices/ to avoid false matches
-    if (endpoint.includes('/crypto/')) {
+    if (endpoint.startsWith('/crypto/')) {
       const msg = 'Cryptocurrency data requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
         'The FMP API adapter does not support crypto endpoints.';
       logger.warn(`FMP unsupported: ${label} — ${msg}`);
@@ -196,7 +194,7 @@ export async function callApi(
     }
 
     // --- Stock Prices ---
-    if (endpoint.includes('/prices/snapshot')) {
+    if (endpoint === '/prices/snapshot/') {
       const result = await fetchFMP('/quote', 'snapshot');
       // FMP returns array; extract first element
       const arr = result.data.snapshot;
@@ -224,12 +222,12 @@ export async function callApi(
     }
 
     // --- Analyst Estimates ---
-    if (endpoint.includes('/analyst-estimates/')) {
+    if (endpoint === '/analyst-estimates/') {
       return returnFMP(await fetchFMP('/analyst-estimates', 'analyst_estimates'));
     }
 
     // --- Insider Trades ---
-    if (endpoint.includes('/insider-trades/')) {
+    if (endpoint === '/insider-trades/') {
       return returnFMP(await fetchFMP('/insider-trading/search', 'insider_trades'));
     }
 
@@ -266,7 +264,7 @@ export async function callApi(
     }
 
     // --- SEC Filing Content (not available via FMP) ---
-    if (endpoint.includes('/filings/items/')) {
+    if (endpoint === '/filings/items/') {
       const msg = 'SEC filing content retrieval requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
         'The FMP API only supports filing metadata via get_filings, not full-text content.';
       logger.warn(`FMP unsupported: ${label} — ${msg}`);

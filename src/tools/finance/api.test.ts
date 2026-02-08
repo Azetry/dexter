@@ -274,10 +274,21 @@ describe('callApi — FMP adapter', () => {
     ).rejects.toThrow('requires a Financial Datasets API key');
   });
 
-  test('throws descriptive error for crypto endpoints (requires Financial Datasets key)', async () => {
-    await expect(
-      callApi('/crypto/prices/snapshot/', { ticker: 'BTC-USD' })
-    ).rejects.toThrow('requires a Financial Datasets API key');
+  test('throws descriptive error for all crypto endpoints (requires Financial Datasets key)', async () => {
+    for (const ep of ['/crypto/prices/snapshot/', '/crypto/prices/', '/crypto/prices/tickers/']) {
+      await expect(
+        callApi(ep, { ticker: 'BTC-USD' })
+      ).rejects.toThrow('requires a Financial Datasets API key');
+    }
+  });
+
+  test('strict matching: /prices/snapshot/ routes to quote, not crypto', async () => {
+    const fmpData = [{ symbol: 'AAPL', price: 185.5 }];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/prices/snapshot/', { ticker: 'AAPL' });
+    expect(result.data).toEqual({ snapshot: fmpData[0] });
+    expect(result.url).toContain('/stable/quote');
   });
 
   test('throws for unsupported endpoints', async () => {

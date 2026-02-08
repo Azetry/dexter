@@ -4,6 +4,18 @@ import { logger } from '../../utils/logger.js';
 const BASE_URL = 'https://api.financialdatasets.ai';
 const FMP_BASE_URL = 'https://financialmodelingprep.com/stable';
 
+/** Compact summary of API response data for debug logging. */
+function summarizeData(data: Record<string, unknown>): string {
+  const keys = Object.keys(data);
+  const parts = keys.map((k) => {
+    const v = data[k];
+    if (Array.isArray(v)) return `${k}: ${v.length} records`;
+    if (v && typeof v === 'object') return `${k}: object`;
+    return `${k}: ${typeof v}`;
+  });
+  return parts.join(', ');
+}
+
 export interface ApiResponse {
   data: Record<string, unknown>;
   url: string;
@@ -20,6 +32,7 @@ export async function callApi(
   if (options?.cacheable) {
     const cached = readCache(endpoint, params);
     if (cached) {
+      logger.debug(`Cache hit: ${label}`, summarizeData(cached.data));
       return cached;
     }
   }
@@ -73,6 +86,7 @@ export async function callApi(
       writeCache(endpoint, params, data, url.toString());
     }
 
+    logger.debug(`API OK: ${label}`, summarizeData(data));
     return { data, url: url.toString() };
   }
 
@@ -108,11 +122,12 @@ export async function callApi(
         return { data: { [subKey]: data }, url: url.toString() };
     };
 
-    // Helper: cache + return
+    // Helper: cache + log + return
     const returnFMP = (result: { data: Record<string, unknown>; url: string }) => {
       if (options?.cacheable) {
         writeCache(endpoint, params, result.data, result.url);
       }
+      logger.debug(`API OK: ${label}`, summarizeData(result.data));
       return result;
     };
 
@@ -145,7 +160,11 @@ export async function callApi(
     // --- Financial Metrics ---
     // NOTE: snapshot must be checked before the general /financial-metrics/ match
     if (endpoint.includes('/financial-metrics/snapshot/')) {
-      return returnFMP(await fetchFMP('/ratios-ttm', 'snapshot'));
+      const result = await fetchFMP('/ratios-ttm', 'snapshot');
+      // FMP returns array; extract first element
+      const arr = result.data.snapshot;
+      result.data = { snapshot: Array.isArray(arr) ? arr[0] : arr };
+      return returnFMP(result);
     }
     if (endpoint.includes('/financial-metrics/')) {
       return returnFMP(await fetchFMP('/ratios', 'financial_metrics'));
@@ -198,10 +217,35 @@ export async function callApi(
     }
 
     // --- SEC Filings (metadata only) ---
+    // FMP stable API requires from/to dates; does not support type filter
     if (endpoint === '/filings/') {
-      const extra: Record<string, string> = {};
-      if (params.filing_type) extra.type = String(params.filing_type);
-      return returnFMP(await fetchFMP('/sec-filings-search/symbol', 'filings', extra));
+      const today = new Date().toISOString().slice(0, 10);
+      const oneYearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+      const extra: Record<string, string> = {
+        from: oneYearAgo,
+        to: today,
+      };
+      const result = await fetchFMP('/sec-filings-search/symbol', 'filings', extra);
+      // Client-side filter: FMP doesn't support type param on this endpoint
+      if (params.filing_type) {
+        const filings = result.data.filings;
+        if (Array.isArray(filings)) {
+          result.data = {
+            filings: filings.filter(
+              (f: Record<string, unknown>) => f.type === String(params.filing_type)
+            ),
+          };
+        }
+      }
+      return returnFMP(result);
+    }
+
+    // --- SEC Filing Content (not available via FMP) ---
+    if (endpoint.includes('/filings/items/')) {
+      throw new Error(
+        'SEC filing content retrieval requires a Financial Datasets API key (FINANCIAL_DATASETS_API_KEY). ' +
+        'The FMP API only supports filing metadata via get_filings, not full-text content.'
+      );
     }
 
     // --- Not supported ---

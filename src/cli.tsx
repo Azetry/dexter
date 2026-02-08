@@ -223,8 +223,7 @@ export function CLI() {
         />
       </Box>
       
-      {/* Debug Panel - set show={false} to hide */}
-      <DebugPanel maxLines={8} show={true} />
+      <DebugPanel maxLines={8} show={process.env.DEXTER_DEBUG === '1'} />
     </Box>
   );
 }

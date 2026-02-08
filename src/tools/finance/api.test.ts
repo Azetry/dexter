@@ -274,6 +274,12 @@ describe('callApi — FMP adapter', () => {
     ).rejects.toThrow('requires a Financial Datasets API key');
   });
 
+  test('throws descriptive error for crypto endpoints (requires Financial Datasets key)', async () => {
+    await expect(
+      callApi('/crypto/prices/snapshot/', { ticker: 'BTC-USD' })
+    ).rejects.toThrow('requires a Financial Datasets API key');
+  });
+
   test('throws for unsupported endpoints', async () => {
     await expect(
       callApi('/some/unsupported/endpoint/', { ticker: 'AAPL' })
@@ -351,6 +357,27 @@ describe('callApi — FMP adapter', () => {
     await expect(
       callApi('/financials/income-statements/', { ticker: 'AAPL', period: 'annual', limit: 1 })
     ).rejects.toThrow('FMP API request failed: 401');
+  });
+
+  test('throws on FMP network error', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND'));
+
+    await expect(
+      callApi('/financials/income-statements/', { ticker: 'AAPL', period: 'annual', limit: 1 })
+    ).rejects.toThrow('FMP API request failed for');
+  });
+
+  test('throws on FMP invalid JSON response', async () => {
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => { throw new SyntaxError('Unexpected token <'); },
+    } as unknown as Response);
+
+    await expect(
+      callApi('/financials/income-statements/', { ticker: 'AAPL', period: 'annual', limit: 1 })
+    ).rejects.toThrow('invalid JSON');
   });
 
   // -------------------------------------------------------------------------

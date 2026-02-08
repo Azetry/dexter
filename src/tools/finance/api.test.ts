@@ -218,17 +218,39 @@ describe('callApi — FMP adapter', () => {
     expect(calledUrl).toContain('to=2024-12-31');
   });
 
-  test('maps filings endpoint (passes filing_type as type param)', async () => {
-    const fmpData = [{ symbol: 'AAPL', type: '10-K', fillingDate: '2024-11-01' }];
+  test('maps filings endpoint with required from/to dates', async () => {
+    const fmpData = [
+      { symbol: 'AAPL', type: '10-K', fillingDate: '2024-11-01' },
+      { symbol: 'AAPL', type: '8-K', fillingDate: '2024-10-15' },
+    ];
     fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
 
-    const result = await callApi('/filings/', { ticker: 'AAPL', filing_type: '10-K', limit: 5 });
+    const result = await callApi('/filings/', { ticker: 'AAPL', limit: 5 });
 
     expect(result.data).toEqual({ filings: fmpData });
     const calledUrl = (fetchSpy.mock.calls[0] as [string])[0];
     expect(calledUrl).toContain('/sec-filings-search/symbol');
     expect(calledUrl).toContain('symbol=AAPL');
-    expect(calledUrl).toContain('type=10-K');
+    expect(calledUrl).toContain('from=');
+    expect(calledUrl).toContain('to=');
+    // type is NOT sent as query param (stable API doesn't support it)
+    expect(calledUrl).not.toContain('type=');
+  });
+
+  test('filters filings by type client-side when filing_type is specified', async () => {
+    const fmpData = [
+      { symbol: 'AAPL', type: '10-K', fillingDate: '2024-11-01' },
+      { symbol: 'AAPL', type: '8-K', fillingDate: '2024-10-15' },
+      { symbol: 'AAPL', type: '10-Q', fillingDate: '2024-08-01' },
+    ];
+    fetchSpy.mockResolvedValueOnce(mockResponse(fmpData));
+
+    const result = await callApi('/filings/', { ticker: 'AAPL', filing_type: '10-K', limit: 5 });
+
+    // Only 10-K should remain after client-side filter
+    expect(result.data).toEqual({
+      filings: [{ symbol: 'AAPL', type: '10-K', fillingDate: '2024-11-01' }],
+    });
   });
 
   test('maps segmented-revenues endpoint', async () => {

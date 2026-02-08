@@ -73,6 +73,22 @@ describe('readCache / writeCache', () => {
     expect(cached!.url).toBe(url);
   });
 
+  test('strips API keys from cached URL', () => {
+    const endpoint = '/income-statements/';
+    const params = { ticker: 'TSLA', limit: 1 };
+    const data = { income_statements: [{ revenue: 1000 }] };
+    const url = 'https://financialmodelingprep.com/stable/income-statement?symbol=TSLA&apikey=SECRET_KEY_123&limit=1';
+
+    writeCache(endpoint, params, data, url);
+    const cached = readCache(endpoint, params);
+
+    expect(cached).not.toBeNull();
+    expect(cached!.url).not.toContain('SECRET_KEY_123');
+    expect(cached!.url).not.toContain('apikey');
+    expect(cached!.url).toContain('symbol=TSLA');
+    expect(cached!.url).toContain('limit=1');
+  });
+
   test('returns null on cache miss (no file)', () => {
     const cached = readCache('/prices/', { ticker: 'AAPL', start_date: '2024-01-01', end_date: '2024-12-31' });
     expect(cached).toBeNull();

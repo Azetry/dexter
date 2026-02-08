@@ -79,7 +79,7 @@ export const getKeyRatios = new DynamicStructuredTool({
       report_period_lt: input.report_period_lt,
       report_period_lte: input.report_period_lte,
     };
-    const { data, url } = await callApi('/financial-metrics/', params);
+    const { data, url } = await callApi('/financial-metrics/', params, { cacheable: true });
     return formatToolResult(data.financial_metrics || [], [url]);
   },
 });

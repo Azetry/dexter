@@ -27,7 +27,7 @@ export const getSegmentedRevenues = new DynamicStructuredTool({
       period: input.period,
       limit: input.limit,
     };
-    const { data, url } = await callApi('/financials/segmented-revenues/', params);
+    const { data, url } = await callApi('/financials/segmented-revenues/', params, { cacheable: true });
     return formatToolResult(data.segmented_revenues || {}, [url]);
   },
 });

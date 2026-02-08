@@ -47,7 +47,7 @@ export const getInsiderTrades = new DynamicStructuredTool({
       filing_date_gt: input.filing_date_gt,
       filing_date_lt: input.filing_date_lt,
     };
-    const { data, url } = await callApi('/insider-trades/', params);
+    const { data, url } = await callApi('/insider-trades/', params, { cacheable: true });
     return formatToolResult(data.insider_trades || [], [url]);
   },
 });

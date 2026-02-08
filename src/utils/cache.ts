@@ -100,6 +100,23 @@ function isValidCacheEntry(value: unknown): value is CacheEntry {
 }
 
 /**
+ * Strip sensitive query parameters (API keys) from a URL before persisting.
+ * Keeps the URL useful for debugging while avoiding plaintext key leakage.
+ */
+function sanitizeUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    for (const key of ['apikey', 'api_key', 'x-api-key']) {
+      url.searchParams.delete(key);
+    }
+    return url.toString();
+  } catch {
+    // Not a valid URL (e.g. aggregated placeholder) — return as-is
+    return raw;
+  }
+}
+
+/**
  * Safely remove a cache file (e.g. when it's corrupted).
  * Logs on failure but never throws.
  */
@@ -171,7 +188,7 @@ export function writeCache(
     endpoint,
     params,
     data,
-    url,
+    url: sanitizeUrl(url),
     cachedAt: new Date().toISOString(),
   };
 

@@ -1,37 +1,49 @@
 # Update Log
 
-> Generated: 2026-02-08 19:51 (+00:00)
+> Generated: 2026-02-08 19:52 (+00:00)
 > v2026.2.5
 
 ## Recommended Commit Message
 
-Add Dockerfile and docker-compose.yml for containerized deployment
+feat: add FMP API as fallback financial data provider
 <details>
 <summary>翻譯</summary>
-新增 Dockerfile 和 docker-compose.yml 以支援容器化部署
+feat: 新增 FMP API 作為備用財務數據提供者
 </details>
 
 ***
 
 ## Summary
 
-Add Docker configuration files to enable containerized deployment using Bun runtime with docker-compose orchestration.
+Add Financial Modeling Prep (FMP) API as a fallback data source when Financial Datasets API key is not configured, with endpoint mapping for income statements, balance sheets, cash flows, and financial metrics.
 <details>
 <summary>翻譯</summary>
-新增 Docker 設定檔，使用 Bun 執行環境搭配 docker-compose 進行容器化部署。
+新增 Financial Modeling Prep (FMP) API 作為備用數據源，當 Financial Datasets API 金鑰未設定時自動切換，支援損益表、資產負債表、現金流量表及財務指標的端點映射。
 </details>
 
 ## Changes
 
-### ADD
-- Add `Dockerfile` using `oven/bun:1` base image with dependency installation and app startup
-- Add `docker-compose.yml` with volume mounts for hot reload, `.env` file loading, and interactive terminal support
+### FEAT
+- Add FMP API adapter with automatic fallback logic in `callApi` function
+- Add endpoint mapping for income statements, balance sheets, cash flow statements, financial metrics, and aggregated financials
+- Add parallel fetching for aggregated financial data via `Promise.all`
 
 <details>
 <summary>翻譯</summary>
 
-- 新增 `Dockerfile`，使用 `oven/bun:1` 基底映像檔，包含依賴安裝和應用啟動
-- 新增 `docker-compose.yml`，配置 volume 掛載支援熱重載、`.env` 檔案載入及互動式終端
+- 在 `callApi` 函式中新增 FMP API 適配器及自動備援邏輯
+- 新增損益表、資產負債表、現金流量表、財務指標及聚合財務數據的端點映射
+- 新增透過 `Promise.all` 平行取得聚合財務數據
+
+</details>
+
+### UPDATE
+- Update `env.example` to document FMP_API_KEY configuration option
+
+<details>
+<summary>翻譯</summary>
+
+- 更新 `env.example` 以記錄 FMP_API_KEY 設定選項
 
 </details>
 
@@ -41,8 +53,8 @@ Add Docker configuration files to enable containerized deployment using Bun runt
 
 | File | Status | Tag |
 |------|--------|-----|
-| `Dockerfile` | Added | ADD |
-| `docker-compose.yml` | Added | ADD |
+| `src/tools/finance/api.ts` | Modified | FEAT |
+| `env.example` | Modified | UPDATE |
 
 ***
 
